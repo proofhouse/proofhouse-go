@@ -272,7 +272,7 @@ lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workfl
 # Markdown (rumdl), config / JS / TS (biome), YAML (yamllint), TOML
 # (tombi), shell correctness and formatting (shellcheck, shfmt), this
 # Justfile's own formatting (just --fmt), and .editorconfig
-# conformance (ec).
+# conformance (editorconfig-checker).
 lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt lint-just lint-editorconfig
 
 # Run Go linters (golangci-lint via the pinned Docker image, vendor-mode).
@@ -435,16 +435,21 @@ lint-shell-fmt:
 lint-just:
     just --fmt --check --unstable
 
-# Check every tracked file against .editorconfig via editorconfig-checker
-# (the binary is named `ec`). .editorconfig has been in the tree since the
-# start with nothing enforcing it, so charset, line endings, final
-# newlines, trailing whitespace, and indentation drifted unchecked. `ec`
-# walks git's file list, so untracked scratch files stay out of scope.
-# Excludes (vendor/, the synced Vale styles, bin/, dist/) live in
-# .editorconfig-checker.json and mirror the top-level `exclude:` in
-# .pre-commit-config.yaml, so the two gates disagree about no file.
+# Check every tracked file against .editorconfig via editorconfig-checker.
+# .editorconfig has been in the tree since the start with nothing enforcing
+# it, so charset, line endings, final newlines, trailing whitespace, and
+# indentation drifted unchecked. The checker walks git's file list, so
+# untracked scratch files stay out of scope. Excludes live in
+# .editorconfig-checker.json: vendor/, the synced Vale styles, bin/, and
+# dist/ mirror the top-level `exclude:` in .pre-commit-config.yaml, so the
+# two gates disagree about no file, plus CHANGELOG.md, which `cog changelog`
+# regenerates wholesale (dropping the final newline) and which the vale hook
+# and the prose recipes already skip for the same reason. The binary name is
+# spelled out in full: upstream's own Makefile also installs a short `ec`
+# alias, but the Homebrew formula builds only `editorconfig-checker`, and
+# the Brewfile is how this repo provisions the tool.
 lint-editorconfig:
-    ec
+    editorconfig-checker
 
 # Pre-validate a drafted commit message against the same gates the
 # commit-msg hook runs, so message problems surface while iterating

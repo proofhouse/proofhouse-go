@@ -3,6 +3,7 @@
     "^vendor/",
     "^\\.vale/(Google|write-good|proselint|ai-tells.*)/",
     "^bin/",
-    "^dist/"
+    "^dist/",
+    "^CHANGELOG\\.md$"
   ]
 }
