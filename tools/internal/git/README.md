@@ -6,7 +6,7 @@ Shell-out wrapper around the system git CLI. Returns Go-typed results for the re
 
 Tools under `tools/` regularly inspect the current worktree: branch, SHA, dirty state, ahead-behind counts against a base, the log, the diff. Each tool used to grow its own `exec.Command("git", ...)` paths. This package collects them in one place with typed results, consistent error handling, and one canonical answer per question.
 
-The package doesn't embed [go-git](https://github.com/go-git/go-git). Native git runs faster and supports every git feature without library catch-up, while pulling in zero dependencies. The package also doesn't cache. Caching policy belongs to the caller because the right policy varies by use case: per-render in contexttemplate, none at all in a one-shot scanner.
+The package doesn't embed [go-git](https://github.com/go-git/go-git). Native git runs faster and supports every git feature without library catch-up, while pulling in zero dependencies. Caching stays out of the package too. Caching policy belongs to the caller because the right policy varies by use case: per-render in contexttemplate, none at all in a one-shot scanner.
 
 ## API
 

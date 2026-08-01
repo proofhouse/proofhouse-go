@@ -1,10 +1,10 @@
 # Contexttemplate
 
-A small Go renderer that turns one or more template files into a Markdown chunk fit for inlining into agent skills, hook prompts, or any other place that wants pre-computed repository context. Templates live next to their callers (agent skill directories, hook directories, anywhere in the repo). The renderer bundles a single loaded template (sprout helpers, project-local registries, project services) and a search path that resolves partial references the way Unix `$PATH` resolves binaries.
+A small Go renderer that turns one or more template files into a Markdown chunk fit for inlining anywhere that wants pre-computed repository context, such as agent skills and hook prompts. Templates live next to their callers (agent skill directories, hook directories, anywhere in the repo). The renderer bundles a single loaded template (sprout helpers, project-local registries, project services) and a search path that resolves partial references the way Unix `$PATH` resolves binaries.
 
 ## Motivation
 
-An agent skill often opens with a block of repository context: current worktree state, the project's Conventional Commits types and scopes, the GitHub labels and assignees available on the repo, and so on. The same context also feeds Claude Code hooks that augment tool calls or build prompts.
+An agent skill often opens with a block of repository context covering current worktree state, the project's Conventional Commits types and scopes, the GitHub labels and assignees available on the repo, and so on. The same context also feeds Claude Code hooks that augment tool calls or build prompts.
 
 Hand-maintained context in the skill or hook file rots fast. A template renderer fixes that by sourcing each section from one canonical computation. Skills and hooks compose the sections they want from a shared catalog of helpers. Every caller reaches the same data through the same code path.
 
@@ -62,7 +62,7 @@ Lint-only flags:
 
 The bare form `contexttemplate <path>` shortcuts to `render <path>` so skill blocks and recipe wrappers stay terse.
 
-A render call may pass more than one path. Renders happen in input order and concatenate with a blank line between each output. The rendered Markdown writes to stdout. A non-zero exit code accompanies any hard error (file not found, parse failure, write failure). Runtime failures inside registries surface through sprout's safe-function wrapping and collect in the per-render error sink rather than aborting the render.
+A render call accepts more than one path. Renders happen in input order and concatenate with a blank line between each output. The rendered Markdown writes to stdout. A non-zero exit code accompanies any hard error (file not found, parse failure, write failure). Runtime failures inside registries surface through sprout's safe-function wrapping and collect in the per-render error sink rather than aborting the render.
 
 The environment variable `CONTEXTTEMPLATE_SEARCH_PATH` layers between flag overrides and the built-in defaults so shells and hooks can set the path once for a session.
 
@@ -118,10 +118,10 @@ flowchart LR
   Internal --> External
 ```
 
-Three layers, each with one job:
+Each layer has one job:
 
 - **Templates** compose registry calls, sprout helpers, partials, and static file content into the final Markdown output. They live in the repo next to their callers.
-- **Registries** expose template-facing functions. Each one reaches its internal clients through the injected per-render `deps`, shapes the result for templates, and registers as a funcmap entry. Thin layer. Returns a pointer (nil on failure) so templates can use `{{ with }}` patterns for fallback rendering.
+- **Registries** expose template-facing functions. Each one reaches its internal clients through the injected per-render `deps`. It shapes the result for templates and registers as a funcmap entry. Thin layer. Returns a pointer (nil on failure) so templates can use `{{ with }}` patterns for fallback rendering.
 - **Shared I/O** lives in `tools/internal/{git,github,repofile,searchpath}`. The `github` package handles its own HTTP-level caching via httpcache. The `git` package shells out without caching. Registries that re-call the same data within one render hold their own small memoization where it matters.
 
 The engine builds one per-render `deps` value and hands it to every registry. `deps` builds the `git` and `github` clients lazily behind `sync.Once`, so the first registry function that needs a client triggers its construction and the rest share it. A render that touches only `worktree` never builds a `github` client, which means no auth resolution and no HTTP. When `Render` returns, the engine discards `deps` and every client it built. A second `Render` starts fresh with its own `deps`.
@@ -140,12 +140,12 @@ Each of the four disk entries wraps its absolute directory through `os.DirFS`, w
 
 A future consumer that wants to override those defaults from outside the tool puts its own `Source` ahead of them through the same flags.
 
-Two lookup modes share the path:
+Both lookup modes share the path:
 
 - **Name lookup** (used by `{{ template "X" . }}` and `{{ include "X" . }}`): append `.tmpl` and search. The name `worktree` resolves to the first source holding `worktree.tmpl` or `_worktree.tmpl` (see the `_` convention below).
 - **Path lookup** (used by `{{ readFile "X" }}`): take `X` as a relative path and search for it verbatim. The path `commit-workflow.md` resolves to the first source holding a file with that exact name.
 
-The search path rejects absolute paths. Both `embed.FS.Open` and `os.DirFS(...).Open` enforce `fs.ValidPath`, so paths carrying `..` segments, leading slashes, or backslashes fail before any read lands. Escape prevention falls out of the `fs.FS` contract rather than living in the resolver.
+The search path rejects absolute paths. Both `embed.FS.Open` and `os.DirFS(...).Open` enforce `fs.ValidPath`, so paths carrying `..` segments, leading slashes, or backslashes fail before any read occurs. Escape prevention falls out of the `fs.FS` contract rather than living in the resolver.
 
 Resolution lives in `tools/internal/searchpath`. Contexttemplate assembles the default sources from the preceding env-var list (wrapped via `os.DirFS`) plus the bundled `embed.FS` (wrapped via `fs.Sub`), then hands the list to `searchpath.New`. The resolver services every lookup from the loader and from the `include` / `readFile` template funcs.
 
@@ -242,9 +242,9 @@ Each `tools/internal` package documents its own surface in its README. Contextte
 The I/O work lives in `tools/internal/`. Each package wraps one external system and exposes typed methods or a configured client. Contexttemplate imports them, alongside other tools like `tools/validate-pr`.
 
 - **`tools/internal/git`**. Shell-out wrapper around the git CLI. Methods return Go-typed results: `Branch`, `SHA`, `Dirty`, `AheadBehind`, `Log`, `Diff`, `ToplevelPath`. No built-in cache. Registries that re-call the same data within one render hold their own memoization.
-- **`tools/internal/github`**. Configured `*go-github.Client` with an httpcache transport. ETag-based conditional requests land cheap 304 responses on repeat calls, and the on-disk cache at `<repo>/tmp/cache/github/` carries data across renders and processes. Auth resolves from `GITHUB_TOKEN`, falling back to `gh auth token` for local development. Callers use the go-github API directly. No wrapper methods.
+- **`tools/internal/github`**. Configured `*go-github.Client` with an httpcache transport. ETag-based conditional requests land cheap 304 responses on repeat calls, and the on-disk cache at `<repo>/tmp/cache/github/` keeps data available across renders and processes. Auth resolves from `GITHUB_TOKEN`, falling back to `gh auth token` for local development. Callers use the go-github API directly. No wrapper methods.
 - **`tools/internal/repofile`**. Reads files from a repo-relative path. The OS handles its own file cache, so no library-level caching.
-- **`tools/internal/searchpath`**. PATH-style name and path resolution over a list of labeled `fs.FS` sources. Disk directories wrap via `os.DirFS`; the bundled partials wrap an `embed.FS` via `fs.Sub`. Used by the engine's loader for partial resolution and by the `include` and `readFile` template funcs.
+- **`tools/internal/searchpath`**. PATH-style name and path resolution over a list of labeled `fs.FS` sources. Disk directories wrap via `os.DirFS`, and the bundled partials wrap an `embed.FS` via `fs.Sub`. Used by the engine's loader for partial resolution and by the `include` and `readFile` template funcs.
 
 ### Registries
 
@@ -317,9 +317,9 @@ Registries skipped until a real consumer asks:
 
 The template authoring surface for reuse follows Helm's pattern.
 
-- **`{{ define "name" -}}...{{- end }}`**. Defines a named block. The block may live in the same file or in a partial file loaded via the search path. Once defined anywhere in the loaded set, any other template in the set can call the block by name.
-- **`{{ template "name" . }}`**. Invokes a named block by name and writes its output directly to the output stream. The name resolves either to an in-file `define` or to a partial loaded from the search path.
-- **`{{ include "name" . }}`**. Invokes a named block by name and returns its rendered output as a string. Same lookup as `template`. The pipeable variant lets templates chain through other functions, like `{{ include "header" . | indent 4 }}`.
+- **`{{ define "name" -}}...{{- end }}`**. Defines a block. The block may live in the same file or in a partial file loaded via the search path. Once defined anywhere in the loaded set, any other template in the set can call the block by name.
+- **`{{ template "name" . }}`**. Invokes a block by name and writes its output directly to the output stream. The name resolves either to an in-file `define` or to a partial loaded from the search path.
+- **`{{ include "name" . }}`**. Invokes a block by name and returns its rendered output as a string. Same lookup as `template`. The pipeable variant lets templates chain through other functions, like `{{ include "header" . | indent 4 }}`.
 - **`{{ readFile "path" }}`**. Reads a file from the search path and returns its content verbatim, without template parsing. Use this for inlining static Markdown content, such as a rules document, into a template.
 
 A recursion counter on `{{ include }}` calls catches cycles at execution time. The counter increments per name on entry and decrements on exit. A name that re-enters past the configured depth limit returns an error to the safe-function wrapper, which records the error in the sink and returns an empty string.
@@ -359,7 +359,7 @@ Hard failures (parse error, missing entry file, missing partial from the search 
 
 ## Central registry
 
-`registry.go` lists every project-local registry and every sprout registry by hand. No `init()` magic, no import-side-effect dependencies. Adding a registry edits this file. Grepping for an ID lands on the canonical wiring.
+`registry.go` lists every project-local registry and every sprout registry by hand. No `init()` magic, no import-side-effect dependencies. Adding a registry edits this file. Grepping for an ID finds the canonical wiring.
 
 Both lists hold constructors rather than built instances. Because `WithSafeFuncs(true)` generates the `safe<Name>` variants when `handler.Build()` runs over every registered registry, and the project registries close over per-render state, the handler gets built once per render. The engine walks both lists each render, calling the project constructors with that render's `deps` and the sprout constructors with no arguments, so every render assembles its own funcmap from fresh instances.
 
@@ -403,7 +403,7 @@ Template authoring needs a fast static check that catches mistakes before render
 Rules available on day one:
 
 - **syntax**. Delegates to `text/template.Parse`. Surfaces unclosed actions and mismatched `if`/`range`/`with`/`end`. Bad pipeline syntax and unrecognized actions show up here too, with the native error locations from `text/template`'s parser.
-- **undefined-function**. Walks the AST for identifiers in pipeline-head positions and checks them against the configured funcmap (sprout registries, project registries, custom funcs). Flags anything that doesn't resolve.
+- **undefined-function**. Walks the AST for identifiers in pipeline-head positions and checks them against the configured funcmap (sprout registries, project registries, custom funcs), flagging anything that doesn't resolve.
 - **missing-partial**. Reuses the loader's partial resolution. A `{{ template "X" . }}` or `{{ include "X" . }}` reference that doesn't match an in-file `{{ define }}` or any file in the search path flags as a missing partial.
 - **cycle**. Static walk of the partial-reference graph from each entry. A back-edge flags as a cycle with the offending path listed.
 

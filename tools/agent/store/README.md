@@ -1,10 +1,10 @@
 # agentstore
 
-A small Go key-value store on top of SQLite. Claude Code agents reach for it as a scratchpad with three possible lifetimes: per project, per session, or per subagent. Any client that finds the right file and follows the schema can read and write. Skill bang-backtick blocks invoke it. Shell hooks invoke it. Ad-hoc terminal calls invoke it. Long-running Go processes import the package directly. Environment variables that Claude Code populates pin the store's location on disk, so a hook, a subagent, and the main agent share state without passing handles around.
+A small Go key-value store on top of SQLite. Claude Code agents reach for it as a scratchpad whose lifetime runs per project, per session, or per subagent. Any client that finds the right file and follows the schema gets read and write access. Skill bang-backtick blocks invoke it, as do shell hooks and ad-hoc terminal calls. Long-running Go processes import the package directly. Environment variables that Claude Code populates pin the store's location on disk, so a hook, a subagent, and the main agent share state without passing handles around.
 
 ## Motivation
 
-Agents and the tools they invoke need somewhere to leave notes for each other within a run. A `PreToolUse` hook wants to count failed commands so a later hook can warn after ten. A subagent wants to record a result for the orchestrator to read back. A skill wants to stash a computed value so a later step in the same session can skip recomputing it. None of that belongs in the transcript, and none of it should leak into the next session unless that leak gets explicitly chosen.
+Agents and the tools they invoke need somewhere to leave notes for each other within a run. A `PreToolUse` hook wants to count failed commands so a later hook can warn after ten. A subagent wants to record a result for the orchestrator to read back, and a skill might stash a computed value so a later step in the same session can skip recomputing it. None of that belongs in the transcript, and none of it should leak into the next session unless that leak gets explicitly chosen.
 
 The access pattern stays deliberately dumb. Every client opens the file just long enough to run its operation, then closes the handle. No daemon or long-lived process owns the database. SQLite's Write-Ahead Logging (WAL) mode keeps this safe across many short-lived processes, where concurrent readers never block each other and a single writer never blocks those readers. `busy_timeout` covers lock contention so callers skip writing retry loops themselves. That property explains why this store lives on SQLite rather than an embedded engine like bbolt, whose exclusive file lock makes open-close-per-operation from many processes a poor fit.
 
@@ -84,7 +84,7 @@ Prepending in this form survives every natural shell construct: `&&`, `||`, `;`,
 
 PreToolUse fires identically for MCP tool calls and built-in tool calls. Only the `tool_name` field differs. MCP tools follow the pattern `mcp__<server>__<tool>` (double underscore separators), such as `mcp__agentstore__set`. Matchers for MCP tools need a regular-expression wildcard, since `mcp__agentstore` matches nothing on its own (compared as a literal string). Use `mcp__agentstore__.*` to match all tools under one server.
 
-A v2 agentstore MCP server would let non-Bash callers reach the store. Bash export tricks don't apply to MCP, but the same PreToolUse rewrite mechanism still works. Instead of editing `tool_input.command`, the hook edits the MCP tool's structured input to embed `agent_id` and `agent_type` in fields the server reads at handler time. Exact shape depends on the agentstore MCP tool schema, designed alongside the server itself (out of scope for v1).
+A v2 agentstore MCP server would let non-Bash callers reach the store. The Bash export trick has no MCP counterpart, but the same PreToolUse rewrite mechanism still works. Instead of editing `tool_input.command`, the hook edits the MCP tool's structured input to embed `agent_id` and `agent_type` in fields the server reads at handler time. Exact shape depends on the agentstore MCP tool schema, designed alongside the server itself (out of scope for v1).
 
 ### Hook failure modes
 
@@ -272,7 +272,7 @@ flowchart LR
   GoPkg --> File
 ```
 
-Go owns one canonical code path: the schema, the embedded migration runner, the CLI, the reference hook binary, and the Go package every consumer imports. The schema lives in `schema.sql`, embedded into the binary via `embed.FS`. The migration runner applies it on `init` and idempotently on open.
+Go owns one canonical code path covering the schema, the embedded migration runner, the CLI, the reference hook binary, and the Go package every consumer imports. The schema lives in `schema.sql`, embedded into the binary via `embed.FS`. The migration runner applies it on `init` and idempotently on open.
 
 ## Schema
 
@@ -294,7 +294,7 @@ CREATE INDEX idx_entries_expires ON entries(expires_at) WHERE expires_at IS NOT 
 PRAGMA user_version = 1;
 ```
 
-`STRICT` enforces column types so a wrong-typed write fails loudly rather than silently coercing. Values always store as JSON. `set foo bar` stores the JSON string `"bar"`. `set --json foo '{"a":1}'` stores the object. That uniformity lets the JSON1 path operations work the same way on every key.
+`STRICT` enforces column types so a wrong-typed write returns an error rather than silently coercing. Values always store as JSON. `set foo bar` stores the JSON string `"bar"`. `set --json foo '{"a":1}'` stores the object. That uniformity lets the JSON1 path operations work the same way on every key.
 
 ## Scope resolution
 
@@ -315,7 +315,7 @@ Parallel subagents and team members can write concurrently, so the store leans o
 - **SQLite WAL plus `busy_timeout`** covers process-level contention. Readers never block. A writer waits up to the timeout for the write lock and surfaces `SQLITE_BUSY` if it can't get it. No client writes a retry loop for lock contention.
 - **Optimistic concurrency via `version`** handles logical conflicts on full-value replacement. `Get` returns the current version. `CompareAndSwap` writes only if it still matches, returning `ErrVersionConflict` on a miss so the caller rereads and retries. This covers the path for read-then-rewrite of a whole value.
 
-Targeted mutations skip the Compare-And-Swap (CAS) dance entirely. `Incr`, `Decr`, and `Append` compile to a single `UPDATE` that reads, computes, then writes inside SQLite's write transaction using JSON1 functions (`json_set`, `json_extract`, `json_insert`). Two agents incrementing the same counter serialize inside the engine with no lost updates and no client-side retry. The `version` column still covers whole-value replacement, while JSON1 handles the surgical edits.
+Targeted mutations skip the Compare-And-Swap (CAS) dance entirely. `Incr`, `Decr`, and `Append` compile to a single `UPDATE` that reads, computes, then writes inside SQLite's write transaction using JSON1 functions (`json_set`, `json_extract`, `json_insert`). Concurrent agents incrementing the same counter serialize inside the engine with no lost updates and no client-side retry. The `version` column still covers whole-value replacement, while JSON1 handles the surgical edits.
 
 Real concurrency observed in testing: a team of three members had its SubagentStart events arrive roughly one second apart, and the resulting tool-call events overlapped across the window. SQLite's WAL handles millisecond-scale contention trivially. In practice the natural Claude Code spin-up pacing already prevents most contention from arising at all.
 
@@ -394,7 +394,7 @@ On PreToolUse with tool_name == "SendMessage" and agent_id present:
   agentstore session append "messages.<recipient>" '{"from": "<sender>", "content": "...", "ts": "..."}' --json
 ```
 
-The same hook can rewrite `tool_input.message` via `updatedInput` before delivery. Examples: adding a sender prefix, redacting Personally Identifiable Information (PII) tokens, or translating shared vocabulary between team members.
+The same hook can rewrite `tool_input.message` via `updatedInput` before delivery. Examples include a sender prefix, redaction of Personally Identifiable Information (PII) tokens, or translation of shared vocabulary between team members.
 
 ### Lead-side todo archival
 
@@ -452,7 +452,7 @@ esac
 exit 0
 ```
 
-The same pattern handles per-agent rate limits, post-failure cooldowns, approval gates, and budget enforcement. Each one reduces to "hook reads agentstore, decides exit code, optionally writes back." For non-trivial policy logic, writing the hook in Go and importing the agentstore package directly avoids per-call process startup.
+The same pattern handles per-agent rate limits, post-failure cooldowns, approval gates, and budget enforcement. Each one reduces to the same shape, where the hook reads agentstore and decides an exit code before optionally writing back. For non-trivial policy logic, writing the hook in Go and importing the agentstore package directly avoids per-call process startup.
 
 ### Template rendering with contexttemplate
 
@@ -474,7 +474,7 @@ History: {{ . }} bash failures across this repo's lifetime.
 {{- end }}
 ```
 
-The registry imports the agentstore Go package, opens one handle per scope per `Render` call, and exposes `agentstoreSession` / `agentstoreProject` / `agentstoreSubagent` template funcs (plus `*Has`, `*Keys`, `*Dump` variants). Reads only. Errors collect in contexttemplate's per-render sink and templates fall back via `{{ with }}` on nil.
+The registry imports the agentstore Go package and opens one handle per scope per `Render` call. It exposes `agentstoreSession` / `agentstoreProject` / `agentstoreSubagent` template funcs (plus `*Has`, `*Keys`, `*Dump` variants). Reads only. Errors collect in contexttemplate's per-render sink and templates fall back via `{{ with }}` on nil.
 
 ## Project layout
 
@@ -496,11 +496,11 @@ tools/agent/store/
 
 ## Open questions
 
-A short list of items that need confirming or deciding before v1 lands.
+A short list of items that need confirming or deciding before the v1 release.
 
 - **Pure-Go SQLite for the Go side.** The choice between `modernc.org/sqlite` (cgo-free, keeps the tool `go install`-able without a C toolchain) and `mattn/go-sqlite3` (cgo, upstream SQLite) stays open. The cgo-free option's WAL multi-process behavior wants a spot-check before committing.
 - **Time-To-Live (TTL) semantics for project scope.** Lazy reap on read leaves unread keys around forever, which matters less for session scope (file gets archived anyway) but lets the project database grow unbounded over many runs. An optional `agentstore project vacuum` recipe, or eager reap on `init`, deserves a decision.
-- **Reference hook packaging.** Whether to distribute the agent-ID injection hook as a Go binary in the agentstore release, a shell script wrapper, or a `just` recipe that calls the Go CLI with a special flag, the three options all work. The choice comes down to install ergonomics for users who want subagent scope.
+- **Reference hook packaging.** The agent-ID injection hook could go out as a Go binary in the agentstore release. A shell script wrapper or a `just` recipe that calls the Go CLI with a special flag would work too, so the three options all stay open. The choice comes down to install ergonomics for users who want subagent scope.
 
 ## Out of scope for v1
 

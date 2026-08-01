@@ -4,9 +4,9 @@ PATH-style name and path resolution over a list of `fs.FS` sources. Takes an ord
 
 ## Purpose
 
-Project tooling that loads files by logical name (template partials, rules documents, configuration fragments) wants the same lookup model that Unix `$PATH` gives binaries. The model: an ordered list of sources with first-match-wins behavior, plus a layering API so callers can prepend or append. Without a shared package, each consumer grows its own search loop with slightly different rules for case sensitivity, escape prevention, and missing-entry behavior.
+Project tooling that loads files by logical name (template partials, rules documents, configuration fragments) wants the same lookup model that Unix `$PATH` gives binaries. That model gives an ordered list of sources with first-match-wins behavior, plus a layering API for prepending or appending. Without a shared package, each consumer grows its own search loop with slightly different rules for case sensitivity, escape prevention, and missing-entry behavior.
 
-This package centralizes that lookup. Two modes run over one source list. A name-with-extension mode handles partial-style references like `{{ template "worktree" . }}`, and a verbatim relative-path mode handles path-style references like `{{ readFile "commit-workflow.md" }}`.
+This package centralizes that lookup. Both lookup modes run over one source list. A name-with-extension mode handles partial-style references like `{{ template "worktree" . }}`, and a verbatim relative-path mode handles path-style references like `{{ readFile "commit-workflow.md" }}`.
 
 A source pairs an `fs.FS` with a display label. Disk directories wrap through `os.DirFS(absDir)`. Bundled assets wrap an `embed.FS` directly, often through `fs.Sub` to strip an internal prefix. Any custom `fs.FS` works too. The resolver treats every source the same way.
 
