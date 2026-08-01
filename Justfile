@@ -260,11 +260,10 @@ fix-markdown *args:
 
 # Aggregator over the Go-flavored lint sub-recipes: golangci-lint,
 # the modernizer gate, the deadcode reachability scan, go-arch-lint
-# layering, and actionlint. Carved out so the `lint-go` job in
-# `.github/workflows/ci.yml` invokes a single recipe rather than
-# enumerate the Go gates in YAML. `just lint` below composes from
-# this plus the prose, spelling, Markdown, config, and YAML gates
-# whose CI install paths land in follow-up workflows.
+# layering, and actionlint. Kept as its own aggregator so a contributor
+# working on Go can run the compiler-adjacent gates without paying for
+# the whole text-quality toolchain; the `lint` job in
+# `.github/workflows/ci.yml` runs the full `lint` aggregator below.
 lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workflows
 
 # Run every linter that operates on the source tree. Aggregator over
@@ -272,7 +271,7 @@ lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workfl
 # Markdown (rumdl), config / JS / TS (biome), YAML (yamllint), TOML
 # (tombi), shell correctness and formatting (shellcheck, shfmt), this
 # Justfile's own formatting (just --fmt), and .editorconfig
-# conformance (editorconfig-checker).
+# conformance (editorconfig-checker). This is what CI runs.
 lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt lint-just lint-editorconfig
 
 # Run Go linters (golangci-lint via the pinned Docker image, vendor-mode).
