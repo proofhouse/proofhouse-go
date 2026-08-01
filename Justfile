@@ -160,11 +160,12 @@ default: lint-go test
 # --- Setup ---
 
 # Set up development environment. New contributors run this once after
-# cloning. Idempotent: re-running upgrades dependencies and refreshes
-# Vale's synced style packages.
+# cloning. Idempotent: re-running upgrades dependencies, refreshes
+# Vale's synced style packages, and re-installs the git hooks.
 setup:
     just install-brew
     just install-tools
+    just prek-install
 
 # Install Homebrew dependencies from Brewfile.
 install-brew:
@@ -721,9 +722,9 @@ prek-all:
     prek run --all-files
 
 # Install the project's pre-commit hooks (commit-msg, pre-commit,
-# pre-push). New contributors run this once after `just setup`; the
-# `just setup` recipe does NOT run it automatically because installing
-# hooks modifies .git/ and contributors may prefer to opt in.
+# pre-push). `just setup` runs this automatically; it stays a separate
+# recipe so contributors can re-install the hooks (which modify .git/)
+# without re-running the whole setup.
 prek-install:
     prek install -t commit-msg -t pre-commit -t pre-push
 
