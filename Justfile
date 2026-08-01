@@ -740,12 +740,13 @@ prek-install:
     prek install -t commit-msg -t pre-commit -t pre-push
 
 # Generate the full CHANGELOG.md from Conventional Commit history.
-# `cog changelog` emits Markdown without an H1; the pipeline prepends
-# one and runs rumdl with MD024 (duplicate headings) disabled so
-# adjacent releases with the same section names don't fight the
-# linter.
+# `cog changelog` emits Markdown without an H1, so the pipeline prepends
+# one and writes the file before linting it in place: rumdl matches the
+# CHANGELOG.md per-file-ignores in .rumdl.toml (which disable MD024 for
+# the repeated version headings) against on-disk paths, not stdin.
 generate-changelog:
-    cog changelog | { echo "# Changelog"; cat; } | rumdl check -d MD024 --fix --stdin > CHANGELOG.md
+    cog changelog | { echo "# Changelog"; cat; } > CHANGELOG.md
+    rumdl check --fix CHANGELOG.md
 
 # Preview the changelog entries since the last tagged release. Useful
 # during release prep to see what `cog changelog` will emit before
