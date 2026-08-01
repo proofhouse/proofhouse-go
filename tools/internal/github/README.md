@@ -29,7 +29,7 @@ The returned client supports every read endpoint go-github exposes. Callers pagi
 
 ## Caching
 
-The httpcache library sits as a transport between go-github and the network. Every GET request goes through the cache: a hit with a still-valid ETag becomes a conditional request that the GitHub API answers with a cheap 304 response, and the cached body returns to the caller without parsing fresh JSON. Cache misses go straight to the live API and write the response back to disk.
+The httpcache library sits as a transport between go-github and the network. Every GET request goes through the cache: a hit with a still-valid ETag becomes a conditional request that the GitHub API answers with a cheap 304 response, and the cached body returns to the caller without parsing fresh JSON. Cache misses continue on to the live API and write the response back to disk.
 
 By default the cache directory sits at `<repo-root>/tmp/cache/github/`, resolved at construction time via `git rev-parse --show-toplevel`. Callers that want a different location pass `WithCacheDir`.
 
