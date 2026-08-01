@@ -1,5 +1,5 @@
-set unstable := true
-set positional-arguments := true
+set unstable
+set positional-arguments
 
 # Run [script] recipes under bash rather than the default sh. On Linux
 # sh is dash, which lacks [[ ]], <<<, and set -o pipefail — constructs
@@ -221,6 +221,14 @@ format-shell:
     files=$(git ls-files '*.sh' ':(exclude)vendor/')
     if [[ -n "$files" ]]; then shfmt -w $files; fi
 
+# Rewrite the Justfile in just's canonical format. Pair with `lint-just`,
+# which fails when the two disagree. --fmt is still an unstable feature;
+# `set unstable` at the top of this file already enables it, but passing
+# --unstable explicitly keeps the recipe working if that setting is ever
+# dropped and matches how the flag is documented upstream.
+format-just:
+    just --fmt --unstable
+
 # --- Fix ---
 
 # Fix Go linting issues. `go fix` (Go 1.26+) runs the modernizer analyzers;
@@ -253,8 +261,9 @@ lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workfl
 # Run every linter that operates on the source tree. Aggregator over
 # the Go gates (via `lint-go-all`), prose (vale), spelling (cspell),
 # Markdown (rumdl), config / JS / TS (biome), YAML (yamllint), TOML
-# (tombi), and shell correctness and formatting (shellcheck, shfmt).
-lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt
+# (tombi), shell correctness and formatting (shellcheck, shfmt), and
+# this Justfile's own formatting (just --fmt).
+lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt lint-just
 
 # Run Go linters (golangci-lint via the pinned Docker image, vendor-mode).
 # --modules-download-mode=vendor matches `just build`, so the linter sees
@@ -408,6 +417,13 @@ lint-shell:
 lint-shell-fmt:
     files=$(git ls-files '*.sh' ':(exclude)vendor/')
     if [[ -n "$files" ]]; then shfmt -d $files; fi
+
+# Fail if `just --fmt` would rewrite this Justfile. Keeps recipe bodies,
+# variable assignments, and settings in one canonical shape rather than
+# drifting per contributor. --check prints the diff and exits non-zero
+# instead of rewriting; `just format-just` is the in-place fixer.
+lint-just:
+    just --fmt --check --unstable
 
 # Pre-validate a drafted commit message against the same gates the
 # commit-msg hook runs, so message problems surface while iterating

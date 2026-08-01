@@ -131,6 +131,16 @@ repos:
         types: [shell]
         pass_filenames: false
 
+      # Fails when `just --fmt` would rewrite the Justfile. Checks rather
+      # than formats, so a reformat never lands without review in the
+      # middle of an unrelated commit; `just format-just` applies it.
+      - id: just-fmt
+        name: just --fmt --check
+        entry: just lint-just
+        language: system
+        files: ^Justfile$
+        pass_filenames: false
+
       - id: vendor-tidy
         name: go mod tidy + vendor drift check
         entry: bash -c 'go mod tidy && go mod vendor && git diff --exit-code -- go.mod go.sum vendor/'
