@@ -127,6 +127,17 @@ shellcheck_image := "docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09
 # linters above (fresh DOCKER_CONFIG, runtime dir on PATH).
 shellcheck := 'DOCKER_CONFIG="$(mktemp -d)" PATH="$(dirname ' + container_runtime + '):$PATH" ' + container_runtime + ' run --rm -v "$(pwd):/mnt:ro" -w /mnt ' + shellcheck_image
 
+# gitleaks version pin. Same Docker-pin pattern as the linters above:
+# the rule set ships inside the image, so pinning the image by digest
+# pins the rules too. Renovate tracks the version + digest pair via the
+# customManager in renovate.json5.
+#
+# renovate: datasource=docker depName=ghcr.io/gitleaks/gitleaks
+
+gitleaks_version := "v8.28.0"
+gitleaks_image := "ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854"
+gitleaks_scan := 'DOCKER_CONFIG="$(mktemp -d)" PATH="$(dirname ' + container_runtime + '):$PATH" ' + container_runtime + ' run --rm -v "$(pwd):/repo" -w /repo ' + gitleaks_image
+
 # Build metadata. `date` is the *committer date* (UTC, ISO-8601),
 # not build invocation time, so two builds of the same commit produce
 # identical binaries. `source_date_epoch` exports the same instant as
@@ -611,11 +622,11 @@ vuln-sarif file:
 # against the bundled regular-expression and entropy rule set;
 # findings name the file, line, commit, and matching rule so the
 # offending change can be located without re-running the scan.
-# Brew pins the binary in the Brewfile; the rule set advances with
-# `brew upgrade gitleaks`. A later workflow under `.github/workflows/`
-# re-runs the same scan on every PR.
+# The scan runs from the digest-pinned image above, so the rule set
+# advances only when Renovate moves that pin. A later workflow under
+# `.github/workflows/` re-runs the same scan on every PR.
 gitleaks:
-    gitleaks git --verbose .
+    {{ gitleaks_scan }} git --verbose .
 
 # Scan each vendored module for two supply-chain concerns in one pass
 # via the external gomodscan tool (extracted from this repo's former
