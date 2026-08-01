@@ -103,6 +103,21 @@ actionlint_image := "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f
 # docker-run prefix as golangci-lint (fresh DOCKER_CONFIG, runtime dir on PATH).
 actionlint := 'DOCKER_CONFIG="$(mktemp -d)" PATH="$(dirname ' + container_runtime + '):$PATH" ' + container_runtime + ' run --rm -v "$(pwd):/repo:ro" -w /repo ' + actionlint_image
 
+# shellcheck version pin. Same Docker-pin pattern as the linters above.
+# The actionlint image already bundles a shellcheck, but it only reaches
+# the `run:` blocks embedded in workflow YAML — standalone *.sh files are
+# invisible to it, so this is a separate image and a separate gate.
+#
+# renovate: datasource=docker depName=koalaman/shellcheck
+shellcheck_version := "v0.11.0"
+shellcheck_image := "docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d"
+
+# shellcheck invocation. Mounts the repo read-only at /mnt with -w /mnt so
+# the relative paths `git ls-files` emits resolve inside the container and
+# the findings name host-relative paths. Same docker-run prefix as the
+# linters above (fresh DOCKER_CONFIG, runtime dir on PATH).
+shellcheck := 'DOCKER_CONFIG="$(mktemp -d)" PATH="$(dirname ' + container_runtime + '):$PATH" ' + container_runtime + ' run --rm -v "$(pwd):/mnt:ro" -w /mnt ' + shellcheck_image
+
 # Build metadata. `date` is the *committer date* (UTC, ISO-8601),
 # not build invocation time, so two builds of the same commit produce
 # identical binaries. `source_date_epoch` exports the same instant as
@@ -194,6 +209,18 @@ format-config *args:
 format-toml:
     tombi format
 
+# Format this project's shell scripts in place via shfmt. shfmt reads
+# .editorconfig for indent width and related style, so the gate and the
+# formatter agree without duplicating settings on the command line. The
+# vendor/ pathspec exclusion keeps third-party scripts out: that source is
+# reviewed at PR time as part of vendor-tidy, not reformatted to this
+# project's style (the same carve-out .pre-commit-config.yaml makes).
+# The `if` guards the empty case, since bare `shfmt -w` would read stdin.
+[script]
+format-shell:
+    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    if [[ -n "$files" ]]; then shfmt -w $files; fi
+
 # --- Fix ---
 
 # Fix Go linting issues. `go fix` (Go 1.26+) runs the modernizer analyzers;
@@ -225,8 +252,9 @@ lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workfl
 
 # Run every linter that operates on the source tree. Aggregator over
 # the Go gates (via `lint-go-all`), prose (vale), spelling (cspell),
-# Markdown (rumdl), config / JS / TS (biome), and YAML (yamllint).
-lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml
+# Markdown (rumdl), config / JS / TS (biome), YAML (yamllint), TOML
+# (tombi), and shell correctness and formatting (shellcheck, shfmt).
+lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt
 
 # Run Go linters (golangci-lint via the pinned Docker image, vendor-mode).
 # --modules-download-mode=vendor matches `just build`, so the linter sees
@@ -360,6 +388,26 @@ lint-yaml *args:
 # the version + digest via the customManager in renovate.json5.
 lint-workflows:
     {{ actionlint }}
+
+# Lint this project's shell scripts via the digest-pinned shellcheck
+# image. This is the gate for standalone *.sh files (tools/fuzz.sh, the
+# .claude/hooks scripts). `lint-workflows` above reaches the shell inside
+# workflow `run:` blocks through actionlint's bundled shellcheck; neither
+# gate sees the other's files, so both are needed. Scoping and the empty
+# guard match `format-shell`.
+[script]
+lint-shell:
+    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    if [[ -n "$files" ]]; then {{ shellcheck }} $files; fi
+
+# Fail if shfmt would reformat any of this project's shell scripts.
+# The `-d` (diff) mode prints what would change and exits non-zero, so a
+# contributor sees the fix without the file being rewritten under them;
+# `just format-shell` is the in-place fixer.
+[script]
+lint-shell-fmt:
+    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    if [[ -n "$files" ]]; then shfmt -d $files; fi
 
 # Pre-validate a drafted commit message against the same gates the
 # commit-msg hook runs, so message problems surface while iterating

@@ -110,6 +110,27 @@ repos:
         types: [go]
         pass_filenames: false
 
+      # Shell gates, wired the same way as golangci-lint above: the
+      # formatter runs first and rewrites in place (a modified file fails
+      # the commit, so the contributor reviews and re-stages), then the
+      # correctness linter runs. Both recipes scope themselves off
+      # `git ls-files` and skip vendor/, so pass_filenames stays false.
+      # The `lint-shell-fmt` diff gate has no hook of its own: shfmt has
+      # already normalized the file by the time shellcheck runs.
+      - id: shfmt
+        name: shfmt
+        entry: just format-shell
+        language: system
+        types: [shell]
+        pass_filenames: false
+
+      - id: shellcheck
+        name: shellcheck
+        entry: just lint-shell
+        language: system
+        types: [shell]
+        pass_filenames: false
+
       - id: vendor-tidy
         name: go mod tidy + vendor drift check
         entry: bash -c 'go mod tidy && go mod vendor && git diff --exit-code -- go.mod go.sum vendor/'

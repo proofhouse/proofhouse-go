@@ -231,3 +231,9 @@ APM|apm
 [Yy]amllint
 org's
 fatalReporter
+[Ss]hellcheck
+shfmt
+[Bb]rewfile
+pathspec
+[Ee]ditorconfig
+koalaman
