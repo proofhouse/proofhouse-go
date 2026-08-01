@@ -5,10 +5,10 @@
 // subagents so the shell environment carries CLAUDE_CODE_AGENT_ID and
 // CLAUDE_CODE_AGENT_TYPE, letting downstream consumers (agentstore,
 // ad-hoc scripts) attribute writes to the firing agent. The binary
-// runs as a PreToolUse hook: it reads the hook payload from standard
-// input, prepends an export statement onto the bash command, and emits
-// the rewritten input on standard output. Every non-rewrite path
-// exits 0 with empty stdout, which the PreToolUse hook protocol treats
+// runs as a PreToolUse hook. It reads the hook payload from standard
+// input and prepends an export statement onto the bash command. The
+// rewritten input goes back out on standard output. Every non-rewrite
+// path exits 0 with empty stdout, which the PreToolUse hook protocol treats
 // as run-the-tool-with-original-input, keeping the agent running
 // through unexpected payloads.
 package main

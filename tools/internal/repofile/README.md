@@ -33,7 +33,7 @@ func (r *Reader) Read(ctx context.Context, relPath string) ([]byte, error)
 func (r *Reader) Exists(ctx context.Context, relPath string) (bool, error)
 ```
 
-The reader treats `relPath` as a slash-separated path that always resolves against `Root`. Absolute paths fail. A path that traverses out of `Root` through `..` also fails before any disk access lands, so a malicious or buggy caller can't read files outside the intended scope.
+The reader treats `relPath` as a slash-separated path that always resolves against `Root`. Absolute paths fail. A path that traverses out of `Root` through `..` also fails before any disk access occurs, so a malicious or buggy caller can't read files outside the intended scope.
 
 ## Caching
 

@@ -4,7 +4,7 @@ Configured [go-github](https://github.com/google/go-github) client with on-disk 
 
 ## Purpose
 
-Tools under `tools/` need typed GitHub API access for read-only operations: listing labels, assignees, milestones, projects, validating issue and PR references, looking up commit metadata. Doing this through `exec.Command("gh", "api", ...)` in every consumer means parsing JSON shells, no type safety, and no shared rate-limit story. Doing it through go-github gives every consumer a typed client. Adding the httpcache transport in front of that client means ETag-based conditional requests, 304 responses on repeat calls, and a shared on-disk cache that carries data across renders and processes.
+Tools under `tools/` need typed GitHub API access for read-only operations: listing labels, assignees, milestones, projects, validating issue and PR references, looking up commit metadata. Doing this through `exec.Command("gh", "api", ...)` in every consumer means parsing JSON shells, no type safety, and no shared rate-limit story. Doing it through go-github gives every consumer a typed client. Adding the httpcache transport in front of that client means ETag-based conditional requests, 304 responses on repeat calls, and a shared on-disk cache that keeps data available across renders and processes.
 
 The package wraps nothing beyond the constructor. Callers consume the standard go-github API surface directly.
 
@@ -29,7 +29,7 @@ The returned client supports every read endpoint go-github exposes. Callers pagi
 
 ## Caching
 
-The httpcache library sits as a transport between go-github and the network. Every GET request goes through the cache: a hit with a still-valid ETag becomes a conditional request that the GitHub API answers with a cheap 304 response, and the cached body returns to the caller without parsing fresh JSON. Cache misses fall through to the live API and write the response back to disk.
+The httpcache library sits as a transport between go-github and the network. Every GET request goes through the cache: a hit with a still-valid ETag becomes a conditional request that the GitHub API answers with a cheap 304 response, and the cached body returns to the caller without parsing fresh JSON. Cache misses go straight to the live API and write the response back to disk.
 
 By default the cache directory sits at `<repo-root>/tmp/cache/github/`, resolved at construction time via `git rev-parse --show-toplevel`. Callers that want a different location pass `WithCacheDir`.
 
