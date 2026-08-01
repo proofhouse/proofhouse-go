@@ -350,7 +350,7 @@ lint-go-arch:
 # inspected. Findings render through the proofhouse-agent template from
 # the proofhouse package: one machine-parseable line per finding.
 lint-prose *args:
-    vale --output=proofhouse-agent.tmpl --glob='!{LICENSE,CHANGELOG.md,.vale/*,tmp/*,vendor/*,.claude/worktrees/*,.claude/rules/*,.claude/skills/*,COMMIT_AGENTMSG}' {{ if args == "" { "." } else { args } }}
+    vale --output=proofhouse-agent.tmpl --glob='!{LICENSE,CHANGELOG.md,.vale/*,tmp/*,vendor/*,apm_modules/*,.claude/worktrees/*,.claude/rules/*,.claude/skills/*,COMMIT_AGENTMSG}' {{ if args == "" { "." } else { args } }}
 
 # Check spelling across the tree against the project dictionary at
 # .cspell-words.txt. cspell ignores binaries, generated files, and the
