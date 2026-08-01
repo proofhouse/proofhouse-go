@@ -141,6 +141,16 @@ repos:
         files: ^Justfile$
         pass_filenames: false
 
+      # Tree-wide .editorconfig conformance. Scope lives in
+      # .editorconfig-checker.json rather than here, so the recipe and the
+      # hook check exactly the same file set.
+      - id: editorconfig-checker
+        name: editorconfig-checker
+        entry: just lint-editorconfig
+        language: system
+        types: [text]
+        pass_filenames: false
+
       - id: vendor-tidy
         name: go mod tidy + vendor drift check
         entry: bash -c 'go mod tidy && go mod vendor && git diff --exit-code -- go.mod go.sum vendor/'

@@ -30,6 +30,13 @@ golangci_lint_image := "docker.io/golangci/golangci-lint:v2.12.2@sha256:5cceeef0
 # well-known install locations so the recipe still works inside agentic
 # harnesses or sandboxes that strip /usr/local/bin from PATH. Override by
 # setting CONTAINER_RUNTIME in the environment.
+#
+# The continuation lines of the `for` list below hang under the first
+# candidate path rather than on a two-space grid, which is what shell
+# style calls for and what `lint-editorconfig` would otherwise reject
+# under this file's indent_size = 2. Exempt just that span rather than
+# re-indent a block the sibling repos carry verbatim.
+# editorconfig-checker-disable
 container_runtime := env("CONTAINER_RUNTIME", `bash -c '
     docker_path=$(command -v docker 2>/dev/null || true)
     podman_path=$(command -v podman 2>/dev/null || true)
@@ -45,6 +52,8 @@ container_runtime := env("CONTAINER_RUNTIME", `bash -c '
     done
     echo docker
 '`)
+
+# editorconfig-checker-enable
 
 # Container invocation prefix for golangci-lint. Mounts the working dir at
 # /data and the host Go module cache so first-run resolution stays cheap.
@@ -261,9 +270,10 @@ lint-go-all: lint-go lint-go-modernize lint-go-deadcode lint-go-arch lint-workfl
 # Run every linter that operates on the source tree. Aggregator over
 # the Go gates (via `lint-go-all`), prose (vale), spelling (cspell),
 # Markdown (rumdl), config / JS / TS (biome), YAML (yamllint), TOML
-# (tombi), shell correctness and formatting (shellcheck, shfmt), and
-# this Justfile's own formatting (just --fmt).
-lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt lint-just
+# (tombi), shell correctness and formatting (shellcheck, shfmt), this
+# Justfile's own formatting (just --fmt), and .editorconfig
+# conformance (ec).
+lint: lint-go-all lint-prose lint-spelling lint-markdown lint-config lint-yaml lint-toml lint-shell lint-shell-fmt lint-just lint-editorconfig
 
 # Run Go linters (golangci-lint via the pinned Docker image, vendor-mode).
 # --modules-download-mode=vendor matches `just build`, so the linter sees
@@ -424,6 +434,17 @@ lint-shell-fmt:
 # instead of rewriting; `just format-just` is the in-place fixer.
 lint-just:
     just --fmt --check --unstable
+
+# Check every tracked file against .editorconfig via editorconfig-checker
+# (the binary is named `ec`). .editorconfig has been in the tree since the
+# start with nothing enforcing it, so charset, line endings, final
+# newlines, trailing whitespace, and indentation drifted unchecked. `ec`
+# walks git's file list, so untracked scratch files stay out of scope.
+# Excludes (vendor/, the synced Vale styles, bin/, dist/) live in
+# .editorconfig-checker.json and mirror the top-level `exclude:` in
+# .pre-commit-config.yaml, so the two gates disagree about no file.
+lint-editorconfig:
+    ec
 
 # Pre-validate a drafted commit message against the same gates the
 # commit-msg hook runs, so message problems surface while iterating

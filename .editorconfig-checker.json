@@ -1,0 +1,8 @@
+{
+  "Exclude": [
+    "^vendor/",
+    "^\\.vale/(Google|write-good|proselint|ai-tells.*)/",
+    "^bin/",
+    "^dist/"
+  ]
+}
