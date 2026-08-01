@@ -230,3 +230,4 @@ autobuild
 APM|apm
 [Yy]amllint
 org's
+fatalReporter
