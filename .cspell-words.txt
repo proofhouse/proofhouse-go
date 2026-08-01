@@ -291,3 +291,7 @@ textfmt
 slotsdir
 rhysd
 tmpl
+lockfiles
+pyproject
+tombi
+venv
