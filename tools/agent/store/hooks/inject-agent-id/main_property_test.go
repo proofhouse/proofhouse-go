@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -21,28 +20,29 @@ import (
 // single-quote escaping (embedded quotes, newlines, dollar signs,
 // backslashes) that example-based tests miss.
 //
-// The test filters out strings containing the zero byte: bash through
-// its command-line interface can't carry such bytes across the argv
-// boundary, so they fall outside the contract. On Windows the same
-// holds for the carriage return, which the Windows bash runtime
-// strips from the command line before the shell ever parses it.
+// The script reaches bash on stdin rather than as a `-c` argument.
+// Passing it as an argument makes Windows re-encode the command line
+// and decode it again inside the bash runtime. Bytes get dropped in
+// that round trip. The carriage return once needed a Windows-only
+// filter for that reason. A later sweep turned up a second input
+// class the filter never covered. Handing the script over a pipe
+// skips the re-encode, so one generator now serves every platform.
+//
+// The zero byte stays filtered. That limit belongs to the contract
+// rather than to any transport, since a Go string holding one can't
+// survive an exec boundary.
 func TestProperty_ShellQuoteRoundTripsThroughBash(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
 	rapid.Check(t, func(t *rapid.T) {
 		s := rapid.String().Filter(func(s string) bool {
-			if strings.ContainsRune(s, 0) {
-				return false
-			}
-			if runtime.GOOS == "windows" && strings.ContainsRune(s, '\r') {
-				return false
-			}
-			return true
+			return !strings.ContainsRune(s, 0)
 		}).Draw(t, "s")
 
-		//nolint:gosec // G204 false positive: feeding bash a constructed shell string forms the test's premise.
-		out, err := exec.CommandContext(ctx, "bash", "-c", "printf '%s' "+shellQuote(s)).Output()
+		cmd := exec.CommandContext(ctx, "bash", "-s")
+		cmd.Stdin = strings.NewReader("printf '%s' " + shellQuote(s))
+		out, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("bash exec failed for input %q (quoted: %s): %v", s, shellQuote(s), err)
 		}
