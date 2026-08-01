@@ -89,6 +89,13 @@ repos:
         types: [text]
         files: "\\.(jsx?|tsx?|c(js|ts)|m(js|ts)|d\\.(ts|cts|mts)|jsonc?|json5|css|svelte|vue|astro|graphql|gql)$"
 
+      - id: tombi
+        name: tombi (TOML lint + format-check)
+        entry: just lint-toml
+        language: system
+        types: [toml]
+        pass_filenames: false
+
       - id: golangci-lint-fmt
         name: golangci-lint fmt
         entry: just format-go
