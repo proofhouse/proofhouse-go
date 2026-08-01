@@ -239,7 +239,7 @@ format-toml:
 # The `if` guards the empty case, since bare `shfmt -w` would read stdin.
 [script]
 format-shell:
-    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    files=$(git ls-files '*.sh' ':!:vendor/')
     if [[ -n "$files" ]]; then shfmt -w $files; fi
 
 # Rewrite the Justfile in just's canonical format. Pair with `lint-just`,
@@ -427,7 +427,7 @@ lint-workflows:
 # guard match `format-shell`.
 [script]
 lint-shell:
-    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    files=$(git ls-files '*.sh' ':!:vendor/')
     if [[ -n "$files" ]]; then {{ shellcheck }} $files; fi
 
 # Fail if shfmt would reformat any of this project's shell scripts.
@@ -436,7 +436,7 @@ lint-shell:
 # `just format-shell` is the in-place fixer.
 [script]
 lint-shell-fmt:
-    files=$(git ls-files '*.sh' ':(exclude)vendor/')
+    files=$(git ls-files '*.sh' ':!:vendor/')
     if [[ -n "$files" ]]; then shfmt -d $files; fi
 
 # Fail if `just --fmt` would rewrite this Justfile. Keeps recipe bodies,
