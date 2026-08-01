@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os/exec"
 	"runtime"
@@ -21,11 +22,17 @@ import (
 // single-quote escaping (embedded quotes, newlines, dollar signs,
 // backslashes) that example-based tests miss.
 //
-// The test filters out strings containing the zero byte: bash through
-// its command-line interface can't carry such bytes across the argv
-// boundary, so they fall outside the contract. On Windows the same
-// holds for the carriage return, which the Windows bash runtime
-// strips from the command line before the shell ever parses it.
+// The script reaches bash on stdin rather than as a `-c` argument, so
+// the payload never crosses the Windows command-line encoder.
+//
+// Filtering still applies to the zero byte and the carriage return,
+// and both limits sit in bash rather than in the transport. The zero
+// byte can't survive any exec boundary. The carriage return disappears when bash on Windows parses
+// script text, which holds whether the text arrives as an argument or
+// over a pipe; a run with that filter removed returned an empty string
+// for a lone `\r` on the windows-2025 job. The round trip asks bash to
+// parse a quoted literal, so the parser decides which runes reach the
+// other side.
 func TestProperty_ShellQuoteRoundTripsThroughBash(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -41,15 +48,50 @@ func TestProperty_ShellQuoteRoundTripsThroughBash(t *testing.T) {
 			return true
 		}).Draw(t, "s")
 
-		//nolint:gosec // G204 false positive: feeding bash a constructed shell string forms the test's premise.
-		out, err := exec.CommandContext(ctx, "bash", "-c", "printf '%s' "+shellQuote(s)).Output()
-		if err != nil {
-			t.Fatalf("bash exec failed for input %q (quoted: %s): %v", s, shellQuote(s), err)
-		}
-		if string(out) != s {
-			t.Fatalf("round-trip mismatch\n  input:  %q\n  quoted: %s\n  output: %q", s, shellQuote(s), out)
-		}
+		assertRoundTrip(ctx, t, s)
 	})
+}
+
+// TestShellQuoteRoundTripsKnownWindowsInput pins the input that broke
+// the windows-2025 job when the script traveled as a `-c` argument.
+// The property check found it once and then lost it, because rapid
+// reports the failing iteration's mutated seed rather than the seed
+// that reproduces the draw. Naming the bytes here keeps the case under
+// test on every platform without waiting for a redraw.
+func TestShellQuoteRoundTripsKnownWindowsInput(t *testing.T) {
+	t.Parallel()
+
+	// A plain letter, an en quad, a doubled backslash, a plus, a
+	// question mark, an astral rune, two more letters, then a run of
+	// extended and combining marks.
+	known := string([]byte{
+		0x41, 0xe2, 0x80, 0x80, 0x5c, 0x5c, 0x2b, 0x3f,
+		0xf0, 0x92, 0x90, 0xb9, 0x61, 0x61, 0xc6, 0xbb,
+		0xe0, 0xa7, 0xb3, 0xcc, 0x8a,
+	})
+
+	assertRoundTrip(t.Context(), t, known)
+}
+
+// fatalReporter covers the reporting surface shared by *testing.T and
+// *rapid.T. rapid.T carries no Helper method, so the shared assertion
+// takes this narrower interface rather than testing.TB.
+type fatalReporter interface {
+	Fatalf(format string, args ...any)
+}
+
+// assertRoundTrip sends one shellQuote result through bash and checks
+// that the shell echoes the input back byte-for-byte.
+func assertRoundTrip(ctx context.Context, t fatalReporter, s string) {
+	cmd := exec.CommandContext(ctx, "bash", "-s")
+	cmd.Stdin = strings.NewReader("printf '%s' " + shellQuote(s))
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("bash exec failed for input %q (quoted: %s): %v", s, shellQuote(s), err)
+	}
+	if string(out) != s {
+		t.Fatalf("round-trip mismatch\n  input:  %q\n  quoted: %s\n  output: %q", s, shellQuote(s), out)
+	}
 }
 
 // TestProperty_RewritePreservesOriginalCommand checks the structural
